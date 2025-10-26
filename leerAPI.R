@@ -1,7 +1,7 @@
 library(httr)
 library(jsonlite)
 
-for(i in BookRecommendation$ISBN){
+for(i in book_recomendation$ISBN){
   response <- GET(paste0("https://www.googleapis.com/books/v1/volumes?q=isbn:",i))
   status_code(response) # comprobar si no dio error
   data_json <- content(response, "text")

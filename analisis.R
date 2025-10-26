@@ -2,7 +2,7 @@ library(dplyr)
 
 book_recomendation <- read.csv(file = "data/BookRecommendation_Dataset.csv", sep=',')
 
-book_ratings <- read.csv(file = "data/Book_Dataset.csv", sep = ";", quote = "", row.names = NULL, stringsAsFactors = FALSE)
+book_ratings <- read.csv(file = "data/Book_DatasetELIMINAR.csv", sep = ";", quote = "", row.names = NULL, stringsAsFactors = FALSE)
 
 main_dataset <- read.csv(file = "data/main_dataset.csv", sep = ',')
 
