@@ -1,0 +1,113 @@
+---
+title: "Práctica DAS"
+author: "Daniel Jiménez García, Maya, Yuliia"
+date: "2025-10-23"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+install.packages("httr")
+install.packages("jsonlite")
+```
+
+## Paquetes necesarios
+
+```{r}
+
+# Cargar los paquetes
+library(httr)
+library(jsonlite)
+library(dplyr)
+```
+
+## Load Data, Joins and Cleaning
+
+Importamos todos el dataset y le aplicamos las transformaciones de eliminar columnas inservibles.
+
+```{r}
+main_dataset <- read.csv(file = "data/main_dataset.csv", sep = ',')
+
+main_dataset <- main_dataset %>% select(-c(image, old_price, img_paths, currency))
+
+main_dataset <- main_dataset %>% 
+  rename(Title= name, Author = author, ISBN = isbn, Starts = book_depository_stars, Format = format, Price = price, Category = category)
+
+
+```
+
+```{r}
+
+get_book_info <- function(isbn, api_key) {
+  # Construir URL de la API
+  url <- paste0("https://www.googleapis.com/books/v1/volumes?q=isbn:", isbn)
+  
+  # Hacer la petición
+  res <- tryCatch({
+    httr::GET(url)
+  }, error = function(e) return(NULL))
+  
+  if (is.null(res) || res$status_code != 200) {
+    return(data.frame(
+      publishedDate = NA,
+      categories = NA,
+      pageCount = NA
+    ))
+  }
+  
+  # Parsear JSON
+  data <- jsonlite::fromJSON(content(res, as = "text", encoding = "UTF-8"))
+  
+  # Comprobar si hay resultados
+  if (is.null(data$items)) {
+    return(data.frame(
+      publishedDate = NA,
+      categories = NA,
+      pageCount = NA
+    ))
+  }
+  
+info <- data$items$volumeInfo
+
+# Extraer campos (con control de errores)
+publishedDate <- ifelse(!is.null(info$publishedDate), info$publishedDate, NA)
+categories <- ifelse(!is.null(info$categories), paste(info$categories, collapse = ", "), NA)
+pageCount <- ifelse(!is.null(info$pageCount), info$pageCount, NA)
+  
+  # Devolver data.frame con los resultados
+  data.frame(
+    publishedDate = publishedDate,
+    categories = categories,
+    pageCount = pageCount
+  )
+}
+
+
+# Aplicar la función a cada fila del dataset
+book_info_list <- lapply(main_dataset$ISBN, function(isbn) get_book_info(isbn))
+
+# Combinar resultados
+book_info_df <- do.call(rbind, book_info_list)
+
+# Añadir columnas nuevas al dataset original
+main_dataset_enriched <- cbind(main_dataset, book_info_df)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
