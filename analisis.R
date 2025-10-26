@@ -93,6 +93,7 @@ df <- main_data_enriched %>%
 summary(df$Price_clean)
 head(df$Price_clean)
 
+# asociación categoría-precio
 df <- df %>%
   mutate(
     Category = str_trim(Category),
@@ -145,4 +146,29 @@ df %>%
        y = "Mean Price (USD)")
 
 
+# asociación categoría-pagecount
+df2 <- df
+df2 <- df2[df2$pageCount != 0, ]
+df2 <- df2[!is.na(df2$pageCount), ]
 
+ggplot(df2, aes(x = reorder(Category, pageCount, mean), y = pageCount)) +
+  geom_boxplot(fill = "lightblue") +
+  coord_flip() +
+  labs(title = "Page Count Distribution by Category",
+       x = "Category",
+       y = "Pages")
+
+df2 %>%
+  group_by(Category) %>%
+  summarise(mean_page = mean(pageCount, na.rm = TRUE)) %>%
+  ggplot(aes(x = reorder(Category, mean_page), y = mean_page)) +
+  geom_col(fill = "skyblue") +
+  coord_flip() +
+  labs(title = "Average Page Count by Category",
+       x = "Category",
+       y = "Mean Pages")
+
+anova_result2 <- aov(pageCount ~ Category, data = df2)
+summary(anova_result2)
+tukey_result <- TukeyHSD(anova_result2)
+tukey_result
