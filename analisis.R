@@ -56,9 +56,6 @@ book_ratings <- book_ratings %>%  mutate(ISBN = as.character(ISBN))
 merged_books <- inner_join(book_ratings, main_dataset, by = c("ISBN"))
 
 
-
-
-
 isbn <- 9788441440098
 
 
@@ -70,4 +67,82 @@ res <- tryCatch({
 data <- jsonlite::fromJSON(content(res, as = "text", encoding = "UTF-8"))
 
 
-                           
+
+library(dplyr)
+library(stringr)
+
+df <- main_data_enriched %>%
+  mutate(
+    # Remove leading/trailing spaces
+    Price = str_trim(Price),
+    
+    # Identify rows that are in USD (with US$ or just $) OR look purely numeric
+    is_usd_or_number = str_detect(Price, "US\\$|^\\$|USD|^[0-9.]+$"),
+    
+    # Clean the Price: remove all non-digit and non-dot characters
+    Price_clean = str_replace_all(Price, "[^0-9.]", ""),
+    
+    # Convert to numeric
+    Price_clean = as.numeric(Price_clean)
+  ) %>%
+  # Keep only rows that are USD-labeled or numeric and have a valid numeric price
+  filter(is_usd_or_number, !is.na(Price_clean)) %>%
+  select(-is_usd_or_number)
+
+
+summary(df$Price_clean)
+head(df$Price_clean)
+
+df <- df %>%
+  mutate(
+    Category = str_trim(Category),
+    Category = str_squish(Category),
+    Category = str_to_title(Category),
+    Category = str_replace_all(Category, "_", " "),
+    Category = na_if(Category, "")
+  ) %>%
+  filter(!is.na(Category))
+
+
+sum(is.na(main_data_enriched$Category))  # before cleaning
+sum(is.na(df$Category))                  # after cleaning (should be 0)
+
+unique(df$Category)
+
+View(df)
+
+df %>%
+  group_by(Category) %>%
+  summarise(
+    avg_price = mean(Price_clean, na.rm = TRUE),
+    n = n()
+  ) %>%
+  arrange(desc(avg_price))
+
+library(ggplot2)
+
+ggplot(df, aes(x = reorder(Category, Price_clean, mean), y = Price_clean)) +
+  geom_boxplot(fill = "lightblue") +
+  coord_flip() +
+  labs(title = "Price Distribution by Category",
+       x = "Category",
+       y = "Price (USD)")
+
+anova_result <- aov(Price_clean ~ Category, data = df)
+summary(anova_result)
+
+library(dplyr)
+library(ggplot2)
+
+df %>%
+  group_by(Category) %>%
+  summarise(mean_price = mean(Price_clean, na.rm = TRUE)) %>%
+  ggplot(aes(x = reorder(Category, mean_price), y = mean_price)) +
+  geom_col(fill = "skyblue") +
+  coord_flip() +
+  labs(title = "Average Price by Category",
+       x = "Category",
+       y = "Mean Price (USD)")
+
+
+
