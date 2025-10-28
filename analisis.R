@@ -172,3 +172,23 @@ anova_result2 <- aov(pageCount ~ Category, data = df2)
 summary(anova_result2)
 tukey_result <- TukeyHSD(anova_result2)
 tukey_result
+
+# Comparar las 3 variables
+library(doBy)
+df$Price <- as.numeric(df$Price)
+df <- df[!is.na(df$pageCount), ]
+df <- df[df$pageCount!=0, ]
+dfSummary <- summaryBy(Price+pageCount ~ Category, data = df, FUN = mean)
+dfSummarybyPageCount <- dfSummary %>%
+  arrange(desc(pageCount.mean))
+dfSummarybyPrice <- dfSummary %>%
+  arrange(desc(Price.mean))
+print(dfSummary, n = 33)
+print(dfSummarybyPageCount, n = 33)
+print(dfSummarybyPrice, n = 33)
+
+# Comparación
+ggplot(df[df$pageCount<2500, ], aes(x = pageCount, y = Price)) + geom_col()
+ggplot(df[df$pageCount<2500, ], aes(x = pageCount, y = Price, fill = Category)) + geom_col()+
+  guides(fill = guide_legend(keywidth = 0.5, keyheight = 0.5))+
+  theme(legend.position = "bottom")
