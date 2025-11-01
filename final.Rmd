@@ -51,7 +51,7 @@ main_dataset <- main_dataset %>%
 
 ```{r}
 
-get_book_info <- function(isbn, api_key) {
+get_book_info <- function(isbn) {
   # Construir URL de la API
   url <- paste0("https://www.googleapis.com/books/v1/volumes?q=isbn:", isbn)
   
@@ -62,6 +62,7 @@ get_book_info <- function(isbn, api_key) {
   
   if (is.null(res) || res$status_code != 200) {
     return(data.frame(
+      publisher = NA,
       publishedDate = NA,
       categories = NA,
       pageCount = NA
@@ -74,6 +75,7 @@ get_book_info <- function(isbn, api_key) {
   # Comprobar si hay resultados
   if (is.null(data$items)) {
     return(data.frame(
+      publisher = NA,
       publishedDate = NA,
       categories = NA,
       pageCount = NA
@@ -83,12 +85,14 @@ get_book_info <- function(isbn, api_key) {
 info <- data$items$volumeInfo
 
 # Extraer campos (con control de errores)
+publisher <- ifelse(!is.null(info$publisher), info$publisher, NA)
 publishedDate <- ifelse(!is.null(info$publishedDate), info$publishedDate, NA)
 categories <- ifelse(!is.null(info$categories), paste(info$categories, collapse = ", "), NA)
 pageCount <- ifelse(!is.null(info$pageCount), info$pageCount, NA)
   
   # Devolver data.frame con los resultados
   data.frame(
+    publisher = publisher,
     publishedDate = publishedDate,
     categories = categories,
     pageCount = pageCount
@@ -104,13 +108,14 @@ book_info_df <- do.call(rbind, book_info_list)
 
 # Añadir columnas nuevas al dataset original
 main_dataset_enriched <- cbind(main_dataset, book_info_df)
+write.csv("data/main_data_enriched.csv", sep = ",")
 ```
 
 
 ```{r}
 main_data_enriched <- read.csv("data/main_data_enriched.csv", sep = ",")
 
-df <- main_data_enriched %>%
+data_cleaned <- main_data_enriched %>%
   mutate(
     # Remove leading/trailing spaces
     Price = str_trim(Price),
@@ -136,7 +141,7 @@ head(df$Price_clean)
 
 
 ```{r}
-df <- df %>%
+df <- data_cleaned %>%
   mutate(
     Category = str_trim(Category),
     Category = str_squish(Category),
@@ -225,6 +230,54 @@ ggplot(df[df$pageCount<2500, ], aes(x = pageCount, y = Price, fill = Category)) 
   guides(fill = guide_legend(keywidth = 0.5, keyheight = 0.5))+
   theme(legend.position = "bottom")
 ```
+
+```{r}
+
+datos_grafico <- data_cleaned %>%
+  filter(!is.na(publisher)) %>%
+  group_by(publisher) %>%
+  summarise(mean_price = mean(Price_clean, na.rm = TRUE)) %>%
+  # Ordenar de mayor a menor precio medio
+  arrange(desc(mean_price)) %>%
+  # Añadir un número de fila para cada editorial
+  mutate(fila = row_number()) %>%
+  # Crear la columna "bloque" para agrupar de 20 en 20
+  mutate(bloque = ceiling(fila / 35))
+
+# PASO 2: Seleccionar el bloque que quieres mostrar
+bloque_a_mostrar <- 1 # Cambia este número para ver otros bloques (2, 3, 4, etc.)
+
+# PASO 3: Filtrar los datos y crear el gráfico
+datos_grafico %>%
+  filter(bloque == bloque_a_mostrar) %>%
+  ggplot(aes(x = reorder(publisher, mean_price), y = mean_price)) +
+  geom_col(fill = "coral") +
+  coord_flip() +
+  labs(title = paste("Editoriales (Bloque", bloque_a_mostrar, ") por Precio Medio"),
+       x = "Editorial (Publisher)",
+       y = "Precio Medio")
+
+
+bloques <- unique(datos_grafico$bloque)
+for (b in bloques) {
+  # Filtrar los datos para el bloque actual
+  datos_filtrados <- datos_grafico %>% filter(bloque == b)
+  
+  # Crear el gráfico
+  p <- ggplot(datos_filtrados, aes(x = reorder(publisher, mean_price), y = mean_price)) +
+    geom_col(fill = "coral") +
+    coord_flip() +
+    labs(title = paste("Editoriales (Bloque", b, ") por Precio Medio"),
+         x = "Editorial (Publisher)",
+         y = "Precio Medio")
+  
+    ggsave(filename = paste0("(image/grafico_bloque_", b, ".png"), plot = p, width = 8, height = 6)
+  
+  # Opcional: imprimir un mensaje de progreso
+  message(paste("Gráfico para el bloque", b, "guardado."))
+}
+```
+
 
 ## Including Plots
 
