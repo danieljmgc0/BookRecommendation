@@ -1,21 +1,17 @@
 ---
-title: "Práctica DAS"
+title: "Recomendador de precios para libros"
 author: "Daniel Jiménez García, Maya Vilchez Romero, Yuliia Solomakha"
 date: "2025-10-23"
 output: pdf_document
----, 8
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+## Introducción
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
+Para empezar, hay que instalar los siguientes paquetes para gestionar las peticiones a la API Books de Google y manejar los JSON. 
 ```{r, message = FALSE}
 install.packages("httr")
 install.packages("jsonlite")
@@ -49,6 +45,9 @@ main_dataset <- main_dataset %>%
 
 ```
 
+
+
+Añadimos la información de la editorial, el año de publicación, la categoría y el número de páginas al hacer la petición a la API de Google. Luego exportamos dicho dataset a un fichero externo.
 ```{r}
 
 get_book_info <- function(isbn) {
@@ -112,10 +111,11 @@ write.csv("data/main_data_enriched.csv", sep = ",")
 ```
 
 
+Después de haber añadido los datos necesarios al dataset, lo primero que hacemos es adecuar la columna de Price del dataset para eliminar valores nulos.
 ```{r}
 main_data_enriched <- read.csv("data/main_data_enriched.csv", sep = ",")
 
-data_cleaned <- main_data_enriched %>%
+main_data_enriched <- main_data_enriched %>%
   mutate(
     # Remove leading/trailing spaces
     Price = str_trim(Price),
@@ -127,21 +127,22 @@ data_cleaned <- main_data_enriched %>%
     Price_clean = str_replace_all(Price, "[^0-9.]", ""),
     
     # Convert to numeric
-    Price_clean = as.numeric(Price_clean)
+    Price = as.numeric(Price_clean)
   ) %>%
   # Keep only rows that are USD-labeled or numeric and have a valid numeric price
   filter(is_usd_or_number, !is.na(Price_clean)) %>%
   select(-is_usd_or_number)
 
+main_data_enriched %>% filter(!is.na(Price)) %>% filter(!is.na(Format)) %>% filter(!is.na(Author))
 
-summary(df$Price_clean)
-head(df$Price_clean)
 
+summary(main_data_enriched$Price)
+head(main_data_enriched$Price)
 ```
 
-
+También limpiamos la columna de Category.
 ```{r}
-df <- data_cleaned %>%
+df <- main_data_enriched %>%
   mutate(
     Category = str_trim(Category),
     Category = str_squish(Category),
@@ -160,28 +161,29 @@ unique(df$Category)
 View(df)
 ```
 
-
+Posteriormente agrupamos por Category
 ```{r}
 df %>%
   group_by(Category) %>%
   summarise(
-    avg_price = mean(Price_clean, na.rm = TRUE),
+    avg_price = mean(Price, na.rm = TRUE),
     n = n()
   ) %>%
   arrange(desc(avg_price))
 
 
-ggplot(df, aes(x = reorder(Category, Price_clean, mean), y = Price_clean)) +
+ggplot(df, aes(x = reorder(Category, Price, mean), y = Price)) +
   geom_boxplot(fill = "lightblue") +
   coord_flip() +
   labs(title = "Price Distribution by Category",
        x = "Category",
        y = "Price (USD)")
 
-anova_result <- aov(Price_clean ~ Category, data = df)
+anova_result <- aov(Price ~ Category, data = df)
 summary(anova_result)
 ```
 
+A continuación, se muestra cómo se distribuye el número de páginas por categoría ordenado de manera descendiente y viendo como los libro de ciencia ficción y fantasía, seguidos de los de romance, historia, cirmen e informática los que más páginas tienen.
 ```{r}
 # asociación categoría-pagecount
 df2 <- df
@@ -211,8 +213,9 @@ tukey_result <- TukeyHSD(anova_result2)
 tukey_result
 ```
 
+
+Además, comparamos el número de páginas con el precio y la categoría para observar que no hay una asociación entre las 3 variables.
 ```{r}
-df$Price <- as.numeric(df$Price)
 df <- df[!is.na(df$pageCount), ]
 df <- df[df$pageCount!=0, ]
 dfSummary <- summaryBy(Price+pageCount ~ Category, data = df, FUN = mean)
@@ -231,12 +234,20 @@ ggplot(df[df$pageCount<2500, ], aes(x = pageCount, y = Price, fill = Category)) 
   theme(legend.position = "bottom")
 ```
 
+
+También estudiamos la relación entre el precio y el formato de publicación para ver su distribución.
+```{r}
+dfSummaryFormat <- summaryBy(Price ~ Format,main_data_enriched[!is.na(main_data_enriched$Price) & !is.na(main_data_enriched$Format), ], FUN=mean)
+ggplot(dfSummaryFormat, aes(x = Price.mean, y = reorder(Format, Price.mean))) + geom_col(fill = "skyblue")
+```
+
+Por último, vemos también la relación entre el precio y las editoriales. Pudiendo comprobar además que las editoriales que se enfocan en libros técnicos o académicos tienen un rango de precio más elevado.
 ```{r}
 
-datos_grafico <- data_cleaned %>%
+datos_grafico <- main_data_enriched %>%
   filter(!is.na(publisher)) %>%
   group_by(publisher) %>%
-  summarise(mean_price = mean(Price_clean, na.rm = TRUE)) %>%
+  summarise(mean_price = mean(Price, na.rm = TRUE)) %>%
   # Ordenar de mayor a menor precio medio
   arrange(desc(mean_price)) %>%
   # Añadir un número de fila para cada editorial
@@ -251,7 +262,7 @@ bloque_a_mostrar <- 1 # Cambia este número para ver otros bloques (2, 3, 4, etc
 datos_grafico %>%
   filter(bloque == bloque_a_mostrar) %>%
   ggplot(aes(x = reorder(publisher, mean_price), y = mean_price)) +
-  geom_col(fill = "coral") +
+  geom_col(fill = "skyblue") +
   coord_flip() +
   labs(title = paste("Editoriales (Bloque", bloque_a_mostrar, ") por Precio Medio"),
        x = "Editorial (Publisher)",
@@ -265,13 +276,13 @@ for (b in bloques) {
   
   # Crear el gráfico
   p <- ggplot(datos_filtrados, aes(x = reorder(publisher, mean_price), y = mean_price)) +
-    geom_col(fill = "coral") +
+    geom_col(fill = "skyblue") +
     coord_flip() +
     labs(title = paste("Editoriales (Bloque", b, ") por Precio Medio"),
          x = "Editorial (Publisher)",
          y = "Precio Medio")
   
-    ggsave(filename = paste0("(image/grafico_bloque_", b, ".png"), plot = p, width = 8, height = 6)
+    ggsave(filename = paste0("image/grafico_bloque_", b, ".png"), plot = p, width = 8, height = 6)
   
   # Opcional: imprimir un mensaje de progreso
   message(paste("Gráfico para el bloque", b, "guardado."))
@@ -279,12 +290,3 @@ for (b in bloques) {
 ```
 
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
